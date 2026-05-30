@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 loadEnvFile(path.join(__dirname, '.env'));
 
 const PORT = Number(process.env.PORT || 3000);
-const HTML_FILE = path.join(__dirname, 'verscity-fixed__21_ (6).html');
+const HTML_FILE = path.join(__dirname, 'index.html');
 const TICKET_STORE_FILE = path.join(__dirname, 'discord-tickets.json');
 const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_OAUTH_AUTHORIZE = 'https://discord.com/oauth2/authorize';
