@@ -8,6 +8,8 @@ loadEnvFile(path.join(__dirname, '.env'));
 const PORT = Number(process.env.PORT || 3000);
 const HTML_FILE = path.join(__dirname, 'index.html');
 const TICKET_STORE_FILE = path.join(__dirname, 'discord-tickets.json');
+const SITE_DATA_FILE = path.join(__dirname, 'site-data.json');
+const SITE_DATA_MAX_BYTES = Number(process.env.SITE_DATA_MAX_BYTES || 8 * 1024 * 1024);
 const DISCORD_API = 'https://discord.com/api/v10';
 const DISCORD_OAUTH_AUTHORIZE = 'https://discord.com/oauth2/authorize';
 const DISCORD_OAUTH_TOKEN = 'https://discord.com/api/oauth2/token';
@@ -21,7 +23,9 @@ const TICKET_LIMIT_MAX = Number(process.env.DISCORD_TICKET_RATE_LIMIT || 5);
 const ticketHits = new Map();
 const oauthStates = new Map();
 const sessions = new Map();
+const siteAdminSessions = new Map();
 let tickets = loadTickets();
+let siteData = loadSiteData();
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -47,6 +51,36 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/discord-me') {
       setCorsHeaders(req, res);
       await handleDiscordMe(req, res);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/site-data') {
+      sendJson(req, res, 200, siteData);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/site-admin-login') {
+      await handleSiteAdminLogin(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/site-admin-logout') {
+      handleSiteAdminLogout(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/site-data/staff') {
+      await handleSiteStaffSave(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/site-data/donation') {
+      await handleSiteDonationSave(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/site-data/vehicle-image') {
+      await handleSiteVehicleImageSave(req, res);
       return;
     }
 
@@ -95,6 +129,92 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`VersCity web server running at http://localhost:${PORT}`);
 });
+
+async function handleSiteAdminLogin(req, res) {
+  const body = await readJson(req);
+  const adminUser = process.env.SITE_ADMIN_USER || 'admin';
+  const adminPass = process.env.SITE_ADMIN_PASS || 'verscity2025';
+  const username = String(body.username || '').trim();
+  const password = String(body.password || '');
+
+  if (username !== adminUser || password !== adminPass) {
+    sendJson(req, res, 401, { message: 'Username atau password admin salah.' });
+    return;
+  }
+
+  const sessionId = makeSecretToken();
+  siteAdminSessions.set(sessionId, { createdAt: Date.now() });
+  setSiteAdminCookie(req, res, sessionId);
+  sendJson(req, res, 200, { ok: true });
+}
+
+function handleSiteAdminLogout(req, res) {
+  const cookies = parseCookies(req.headers.cookie || '');
+  if (cookies.vrc_site_admin) siteAdminSessions.delete(cookies.vrc_site_admin);
+  clearSiteAdminCookie(req, res);
+  sendJson(req, res, 200, { ok: true });
+}
+
+async function handleSiteStaffSave(req, res) {
+  if (!isSiteAdmin(req)) {
+    sendJson(req, res, 401, { message: 'Login admin dulu untuk menyimpan data website.' });
+    return;
+  }
+
+  const body = await readJson(req, SITE_DATA_MAX_BYTES);
+  if (!Array.isArray(body.staff)) {
+    sendJson(req, res, 400, { message: 'Data staff tidak valid.' });
+    return;
+  }
+
+  siteData.staff = body.staff;
+  saveSiteData();
+  sendJson(req, res, 200, { ok: true, siteData });
+}
+
+async function handleSiteDonationSave(req, res) {
+  if (!isSiteAdmin(req)) {
+    sendJson(req, res, 401, { message: 'Login admin dulu untuk menyimpan data website.' });
+    return;
+  }
+
+  const body = await readJson(req, SITE_DATA_MAX_BYTES);
+  const panel = cleanText(body.panel, '');
+  const allowedPanels = new Set(['vip', 'vehicle', 'rumah', 'custom']);
+  if (!allowedPanels.has(panel) || !Array.isArray(body.items)) {
+    sendJson(req, res, 400, { message: 'Data donation tidak valid.' });
+    return;
+  }
+
+  if (!siteData.donation || typeof siteData.donation !== 'object') siteData.donation = {};
+  siteData.donation[panel] = body.items;
+  saveSiteData();
+  sendJson(req, res, 200, { ok: true, siteData });
+}
+
+async function handleSiteVehicleImageSave(req, res) {
+  if (!isSiteAdmin(req)) {
+    sendJson(req, res, 401, { message: 'Login admin dulu untuk menyimpan data website.' });
+    return;
+  }
+
+  const body = await readJson(req, SITE_DATA_MAX_BYTES);
+  const id = slugify(String(body.id || ''), 80);
+  const image = body.image === null ? null : String(body.image || '');
+  if (!id) {
+    sendJson(req, res, 400, { message: 'ID kendaraan tidak valid.' });
+    return;
+  }
+
+  if (!siteData.vehicleImages || typeof siteData.vehicleImages !== 'object') siteData.vehicleImages = {};
+  if (image) {
+    siteData.vehicleImages[id] = image;
+  } else {
+    delete siteData.vehicleImages[id];
+  }
+  saveSiteData();
+  sendJson(req, res, 200, { ok: true, siteData });
+}
 
 async function handleDiscordAuthStart(req, res, url) {
   const clientId = process.env.DISCORD_CLIENT_ID;
@@ -579,6 +699,45 @@ function setSessionCookie(req, res, sessionId) {
   res.setHeader('Set-Cookie', attrs.join('; '));
 }
 
+function isSiteAdmin(req) {
+  const cookies = parseCookies(req.headers.cookie || '');
+  const sid = cookies.vrc_site_admin;
+  if (!sid) return false;
+  const session = siteAdminSessions.get(sid);
+  if (!session) return false;
+  if (Date.now() - session.createdAt > 7 * 24 * 60 * 60 * 1000) {
+    siteAdminSessions.delete(sid);
+    return false;
+  }
+  return true;
+}
+
+function setSiteAdminCookie(req, res, sessionId) {
+  const secure = getPublicBaseUrl(req).startsWith('https://');
+  const attrs = [
+    `vrc_site_admin=${sessionId}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=604800'
+  ];
+  if (secure) attrs.push('Secure');
+  res.setHeader('Set-Cookie', attrs.join('; '));
+}
+
+function clearSiteAdminCookie(req, res) {
+  const secure = getPublicBaseUrl(req).startsWith('https://');
+  const attrs = [
+    'vrc_site_admin=',
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=0'
+  ];
+  if (secure) attrs.push('Secure');
+  res.setHeader('Set-Cookie', attrs.join('; '));
+}
+
 function parseCookies(cookieHeader) {
   const cookies = {};
   cookieHeader.split(';').forEach(part => {
@@ -599,14 +758,14 @@ function publicDiscordUser(user) {
   };
 }
 
-function readJson(req) {
+function readJson(req, maxBytes = 16_384) {
   return new Promise((resolve, reject) => {
     let raw = '';
     let tooLarge = false;
 
     req.on('data', chunk => {
       raw += chunk;
-      if (raw.length > 16_384) {
+      if (raw.length > maxBytes) {
         tooLarge = true;
         req.destroy();
       }
@@ -828,6 +987,32 @@ function saveTickets() {
     fs.writeFileSync(TICKET_STORE_FILE, JSON.stringify(tickets, null, 2));
   } catch (err) {
     console.warn('Failed to save ticket store:', err.message);
+  }
+}
+
+function loadSiteData() {
+  const empty = { staff: null, donation: {}, vehicleImages: {} };
+  if (!fs.existsSync(SITE_DATA_FILE)) return empty;
+
+  try {
+    const raw = fs.readFileSync(SITE_DATA_FILE, 'utf8');
+    const parsed = raw.trim() ? JSON.parse(raw) : empty;
+    return {
+      staff: Array.isArray(parsed.staff) ? parsed.staff : null,
+      donation: parsed.donation && typeof parsed.donation === 'object' ? parsed.donation : {},
+      vehicleImages: parsed.vehicleImages && typeof parsed.vehicleImages === 'object' ? parsed.vehicleImages : {}
+    };
+  } catch (err) {
+    console.warn('Failed to load site data store:', err.message);
+    return empty;
+  }
+}
+
+function saveSiteData() {
+  try {
+    fs.writeFileSync(SITE_DATA_FILE, JSON.stringify(siteData, null, 2));
+  } catch (err) {
+    console.warn('Failed to save site data store:', err.message);
   }
 }
 

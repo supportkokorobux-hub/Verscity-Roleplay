@@ -2323,6 +2323,123 @@
   const DISCORD_AUTH_START_ENDPOINT = window.location.protocol === 'file:'
     ? 'http://localhost:3000/auth/discord/start'
     : '/auth/discord/start';
+  const SITE_DATA_ENDPOINT = window.location.protocol === 'file:'
+    ? 'http://localhost:3000/api/site-data'
+    : '/api/site-data';
+  const SITE_ADMIN_LOGIN_ENDPOINT = window.location.protocol === 'file:'
+    ? 'http://localhost:3000/api/site-admin-login'
+    : '/api/site-admin-login';
+  const SITE_ADMIN_LOGOUT_ENDPOINT = window.location.protocol === 'file:'
+    ? 'http://localhost:3000/api/site-admin-logout'
+    : '/api/site-admin-logout';
+
+  const siteStore = {
+    loaded: false,
+    data: { staff: null, donation: {}, vehicleImages: {} }
+  };
+
+  function siteClone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  async function siteLoadRemoteData() {
+    try {
+      const res = await fetch(SITE_DATA_ENDPOINT, { credentials: 'include' });
+      if (!res.ok) throw new Error('Site data gagal dimuat.');
+      const data = await res.json();
+      siteStore.data = {
+        staff: Array.isArray(data.staff) ? data.staff : null,
+        donation: data.donation && typeof data.donation === 'object' ? data.donation : {},
+        vehicleImages: data.vehicleImages && typeof data.vehicleImages === 'object' ? data.vehicleImages : {}
+      };
+      siteStore.loaded = true;
+      if (typeof siteRefreshFromRemote === 'function') siteRefreshFromRemote();
+    } catch (err) {
+      siteStore.loaded = false;
+    }
+  }
+
+  function sitePost(endpoint, payload) {
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    }).then(res => {
+      if (!res.ok) console.warn('Site data sync gagal:', res.status);
+      return res;
+    }).catch(err => console.warn('Site data sync gagal:', err));
+  }
+
+  function siteSaveStaff(list) {
+    siteStore.data.staff = siteClone(list);
+    return sitePost(SITE_DATA_ENDPOINT + '/staff', { staff: list });
+  }
+
+  function siteSaveDonation(panel, items) {
+    if (!siteStore.data.donation || typeof siteStore.data.donation !== 'object') siteStore.data.donation = {};
+    siteStore.data.donation[panel] = siteClone(items);
+    return sitePost(SITE_DATA_ENDPOINT + '/donation', { panel, items });
+  }
+
+  function siteSaveVehicleImage(id, image) {
+    if (!siteStore.data.vehicleImages || typeof siteStore.data.vehicleImages !== 'object') siteStore.data.vehicleImages = {};
+    if (image) siteStore.data.vehicleImages[id] = image;
+    else delete siteStore.data.vehicleImages[id];
+    return sitePost(SITE_DATA_ENDPOINT + '/vehicle-image', { id, image });
+  }
+
+  function siteAdminLogin(username, password) {
+    return fetch(SITE_ADMIN_LOGIN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ username, password })
+    }).then(async res => {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || 'Login admin server gagal.');
+      }
+      return res;
+    });
+  }
+
+  function siteAdminLogout() {
+    return sitePost(SITE_ADMIN_LOGOUT_ENDPOINT, {});
+  }
+
+  function siteRefreshFromRemote() {
+    if (document.getElementById('page-staff')?.classList.contains('active') && typeof staffRenderGrid === 'function') staffRenderGrid();
+    if (typeof donRenderAll === 'function') donRenderAll();
+    if (document.getElementById('page-vehicle')?.classList.contains('active') && vpCurrentCategory) goVehiclePicker(vpCurrentCategory);
+  }
+
+  function sitePushLocalDataIfServerEmpty() {
+    try {
+      if (!Array.isArray(siteStore.data.staff)) {
+        const rawStaff = localStorage.getItem('vrc_staff');
+        if (rawStaff) siteSaveStaff(JSON.parse(rawStaff));
+      }
+
+      ['vip','vehicle','rumah','custom'].forEach(panel => {
+        if (siteStore.data.donation && Array.isArray(siteStore.data.donation[panel])) return;
+        const raw = localStorage.getItem('vrc_don_' + panel);
+        if (raw) siteSaveDonation(panel, JSON.parse(raw));
+      });
+
+      Object.keys(localStorage).forEach(key => {
+        if (!key.startsWith('vimg_')) return;
+        const id = key.slice(5);
+        if (siteStore.data.vehicleImages && siteStore.data.vehicleImages[id]) return;
+        const val = localStorage.getItem(key);
+        if (val) siteSaveVehicleImage(id, val);
+      });
+    } catch (err) {
+      console.warn('Migrasi data lokal gagal:', err);
+    }
+  }
+
+  const siteDataReady = siteLoadRemoteData();
 
   async function createDiscordTicketChannel(btn) {
     const originalText = btn.textContent;
@@ -2462,12 +2579,18 @@
   // Simpan gambar di sessionStorage — works di file:// lokal maupun hosting
   const vehicleImages = {
     get(id) {
-      try { return sessionStorage.getItem('vimg_' + id) || localStorage.getItem('vimg_' + id) || null; } catch(e) { return null; }
+      try {
+        return (siteStore.data.vehicleImages && siteStore.data.vehicleImages[id])
+          || sessionStorage.getItem('vimg_' + id)
+          || localStorage.getItem('vimg_' + id)
+          || null;
+      } catch(e) { return null; }
     },
     set(id, val) {
       try { sessionStorage.setItem('vimg_' + id, val); localStorage.setItem('vimg_' + id, val); } catch(e) {
         try { sessionStorage.setItem('vimg_' + id, val); } catch(e2) {}
       }
+      siteSaveVehicleImage(id, val);
     }
   };
 
@@ -2732,10 +2855,17 @@
     adminPendingInput = null;
   }
 
-  function adminDoLogin() {
+  async function adminDoLogin() {
     const u = document.getElementById('admin-user').value.trim();
     const p = document.getElementById('admin-pass').value;
     if (u === ADMIN_USER && p === ADMIN_PASS) {
+      try {
+        await siteAdminLogin(u, p);
+        await siteDataReady;
+        sitePushLocalDataIfServerEmpty();
+      } catch (err) {
+        console.warn('Login admin server gagal, admin lokal tetap aktif:', err);
+      }
       adminLoggedIn = true;
       sessionStorage.setItem('vrc_admin', '1');
       document.getElementById('admin-modal').style.display = 'none';
@@ -2757,6 +2887,7 @@
   function adminLogout() {
     adminLoggedIn = false;
     sessionStorage.removeItem('vrc_admin');
+    siteAdminLogout();
     document.getElementById('admin-badge').style.display = 'none';
     const nb = document.getElementById('nav-admin-btn');
     if (nb) {
@@ -2790,6 +2921,7 @@
 
   function staffLoad() {
     try {
+      if (Array.isArray(siteStore.data.staff)) return siteClone(siteStore.data.staff);
       const raw = localStorage.getItem('vrc_staff');
       return raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(STAFF_DEFAULT));
     } catch(e) { return JSON.parse(JSON.stringify(STAFF_DEFAULT)); }
@@ -2797,6 +2929,7 @@
 
   function staffSaveData(list) {
     try { localStorage.setItem('vrc_staff', JSON.stringify(list)); } catch(e) {}
+    siteSaveStaff(list);
   }
 
   function staffInitials(name) {
@@ -3134,6 +3267,9 @@ const DON_DEFAULTS = {
 
 function donLoad(panel) {
   try {
+    if (siteStore.data.donation && Array.isArray(siteStore.data.donation[panel])) {
+      return siteClone(siteStore.data.donation[panel]);
+    }
     const raw = localStorage.getItem('vrc_don_' + panel);
     if (!raw) return JSON.parse(JSON.stringify(DON_DEFAULTS[panel]));
     const list = JSON.parse(raw);
@@ -3151,6 +3287,7 @@ function donLoad(panel) {
 
 function donSaveData(panel, list) {
   try { localStorage.setItem('vrc_don_' + panel, JSON.stringify(list)); } catch(e) {}
+  siteSaveDonation(panel, list);
 }
 
 function donRenderGrid(panel) {
@@ -3298,15 +3435,19 @@ function donRemove(panel, id) {
 
 // ── Hook into existing showPage to re-render donation grids with admin buttons on login/logout
 const _origAdminDoLogin = adminDoLogin;
-adminDoLogin = function() {
-  _origAdminDoLogin();
-  if (adminLoggedIn) donRenderAll();
+adminDoLogin = async function() {
+  await _origAdminDoLogin();
+  if (adminLoggedIn) {
+    if (typeof staffRenderGrid === 'function') staffRenderGrid();
+    donRenderAll();
+  }
   vpSyncPhotoButtons();
 };
 
 const _origAdminLogout = adminLogout;
 adminLogout = function() {
   _origAdminLogout();
+  if (typeof staffRenderGrid === 'function') staffRenderGrid();
   donRenderAll();
   vpSyncPhotoButtons();
 };

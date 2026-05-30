@@ -1,4 +1,5 @@
 .env
 discord-tickets.json
+site-data.json
 server.out.log
 server.err.log
