@@ -1,0 +1,4 @@
+.env
+discord-tickets.json
+server.out.log
+server.err.log

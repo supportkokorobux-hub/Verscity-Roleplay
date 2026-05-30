@@ -1,0 +1,82 @@
+{
+  "tkt_f2e6ad9ec2a4283c": {
+    "id": "tkt_f2e6ad9ec2a4283c",
+    "approvalToken": "d7566335c69ca2c87155f4bca1da1be41b5611d5ab6fe60f",
+    "status": "approved",
+    "item": "Motor Sport — NRG-500",
+    "price": "Rp 15.000",
+    "channelId": "1510324057063686164",
+    "channelUrl": "https://discord.com/channels/1508518052516462654/1510324057063686164",
+    "inviteUrl": "https://discord.gg/fbsuh2h4",
+    "redirectUrl": "https://discord.gg/fbsuh2h4",
+    "createdAt": "2026-05-30T16:42:25.486Z",
+    "approvedAt": "2026-05-30T16:42:46.214Z"
+  },
+  "tkt_148077b2f8686f7d": {
+    "id": "tkt_148077b2f8686f7d",
+    "approvalToken": "c2076e824007fe82803fc996478a631d194373293084a4b2",
+    "status": "approved",
+    "item": "Motor Sport — NRG-500",
+    "price": "Rp 15.000",
+    "channelId": "1510324359934382271",
+    "channelUrl": "https://discord.com/channels/1508518052516462654/1510324359934382271",
+    "inviteUrl": "https://discord.gg/HDEXnZqS",
+    "redirectUrl": "https://discord.gg/HDEXnZqS",
+    "createdAt": "2026-05-30T16:43:37.822Z",
+    "approvedAt": "2026-05-30T16:44:00.035Z"
+  },
+  "tkt_7a5f5257b2d4a595": {
+    "id": "tkt_7a5f5257b2d4a595",
+    "approvalToken": "2872c195ea57aa3a08d963740f0e3c12d29cfe3e92da4bb0",
+    "status": "approved",
+    "item": "Motor Sport — NRG-500",
+    "price": "Rp 15.000",
+    "customer": {
+      "id": "739434907394113556",
+      "username": "Michiee",
+      "avatar": "98db912ec149277a86b539a29313e03f"
+    },
+    "channelId": "1510330043547779152",
+    "channelUrl": "https://discord.com/channels/1508518052516462654/1510330043547779152",
+    "inviteUrl": null,
+    "redirectUrl": "https://discord.com/channels/1508518052516462654/1510330043547779152",
+    "createdAt": "2026-05-30T17:06:12.800Z",
+    "approvedAt": "2026-05-30T17:06:52.456Z"
+  },
+  "tkt_eca21434c0f28ef8": {
+    "id": "tkt_eca21434c0f28ef8",
+    "approvalToken": "f131e90d8596cae6cfd2fe27321cadb1bb37a8084ef66feb",
+    "status": "approved",
+    "item": "Mobil Sport — Turismo",
+    "price": "Rp 50.000",
+    "customer": {
+      "id": "739434907394113556",
+      "username": "Michiee",
+      "avatar": "98db912ec149277a86b539a29313e03f"
+    },
+    "channelId": "1510331639132192958",
+    "channelUrl": "https://discord.com/channels/1508518052516462654/1510331639132192958",
+    "inviteUrl": null,
+    "redirectUrl": "https://discord.com/channels/1508518052516462654/1510331639132192958",
+    "createdAt": "2026-05-30T17:12:33.237Z",
+    "approvedAt": "2026-05-30T17:13:36.444Z"
+  },
+  "tkt_2c06119489d85043": {
+    "id": "tkt_2c06119489d85043",
+    "approvalToken": "8d23a15c0e37cdba5bed122a4d592bcc827012030c1cbeb5",
+    "status": "pending",
+    "item": "Mobil Sport — Turismo",
+    "price": "Rp 50.000",
+    "customer": {
+      "id": "739434907394113556",
+      "username": "Michiee",
+      "avatar": "98db912ec149277a86b539a29313e03f"
+    },
+    "channelId": "1510335001361649666",
+    "channelUrl": "https://discord.com/channels/1508518052516462654/1510335001361649666",
+    "inviteUrl": null,
+    "redirectUrl": "https://discord.com/channels/1508518052516462654/1510335001361649666",
+    "createdAt": "2026-05-30T17:25:54.995Z",
+    "approvedAt": null
+  }
+}
